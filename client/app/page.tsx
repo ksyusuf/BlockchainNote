@@ -1,6 +1,13 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import freighterApi from "@stellar/freighter-api";
+import { isConnected, requestAccess, getPublicKey } from "@stellar/freighter-api";
+
+// Freighter window tipini tanımla
+declare global {
+  interface Window {
+    freighter?: any;
+  }
+}
 
 interface Note {
   id: string;
@@ -21,44 +28,95 @@ export default function NotesApp() {
   useEffect(() => {
     const checkFreighter = async () => {
       try {
-        const connected = await freighterApi.isConnected();
+        if (typeof window === 'undefined') return;
+
+        console.log("Freighter bağlantısı kontrol ediliyor...");
+        
+        // Önce bağlantıyı kontrol et
+        const connected = await isConnected();
+        console.log("Freighter bağlantı durumu:", connected);
+        
         if (connected) {
-          const { address } = await freighterApi.getAddress();
-          setPublicKey(address);
-          await loadNotes(address);
+          try {
+            // Erişim izni iste
+            const hasPermission = await requestAccess();
+            console.log("Freighter izin durumu:", hasPermission);
+            
+            if (hasPermission) {
+              // Public key'i al
+              const publicKey = await getPublicKey();
+              console.log("Freighter public key:", publicKey);
+              
+              if (publicKey) {
+                setPublicKey(publicKey);
+                await loadNotes(publicKey);
+              }
+            }
+          } catch (permError) {
+            console.error("Freighter izin hatası:", permError);
+          }
         }
       } catch (error) {
         console.error("Freighter bağlantı hatası:", error);
       }
     };
-    checkFreighter();
+
+    // Sayfanın tamamen yüklenmesini bekle
+    if (document.readyState === 'complete') {
+      checkFreighter();
+    } else {
+      window.addEventListener('load', checkFreighter);
+      return () => window.removeEventListener('load', checkFreighter);
+    }
   }, []);
 
   // Cüzdan bağla
   const handleConnectWallet = async () => {
     try {
-      await freighterApi.setAllowed();
-      const { address } = await freighterApi.getAddress();
-      setPublicKey(address);
-      await loadNotes(address);
+      if (typeof window === 'undefined') return;
+
+      console.log("Cüzdan bağlantısı başlatılıyor...");
+      
+      // Erişim izni iste
+      const hasPermission = await requestAccess();
+      console.log("Freighter izin durumu:", hasPermission);
+      
+      if (hasPermission) {
+        // Public key'i al
+        const publicKey = await getPublicKey();
+        console.log("Freighter public key:", publicKey);
+        
+        if (publicKey) {
+          setPublicKey(publicKey);
+          await loadNotes(publicKey);
+        }
+      }
     } catch (error) {
       console.error("Cüzdan bağlantı hatası:", error);
+      alert("Cüzdan bağlantısı sırasında bir hata oluştu!");
     }
   };
 
   // Notları yükle (mock data - gerçek uygulamada blockchain'den gelecek)
   const loadNotes = async (address: string) => {
-    // Bu fonksiyon gerçek uygulamada blockchain'den notları çekecek
-    const mockNotes: Note[] = [
-      {
-        id: "1",
-        title: "İlk Notum",
-        content: "Bu benim blockchain üzerindeki ilk notum!",
-        ipfsHash: "QmXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-        timestamp: Date.now() - 86400000
-      }
-    ];
-    setNotes(mockNotes);
+    try {
+      console.log("Notlar yükleniyor, adres:", address);
+      // Bu fonksiyon gerçek uygulamada blockchain'den notları çekecek
+      const mockNotes: Note[] = [
+        {
+          id: "1",
+          title: "İlk Notum",
+          content: "Bu benim blockchain üzerindeki ilk notum!",
+          ipfsHash: "QmXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          timestamp: Date.now() - 86400000
+        }
+      ];
+      console.log("Notlar başarıyla yüklendi:", mockNotes);
+      setNotes(mockNotes);
+    } catch (error) {
+      console.error("Notları yükleme hatası:", error);
+      alert("Notlar yüklenirken bir hata oluştu!");
+    }
   };
 
   // Yeni not oluştur

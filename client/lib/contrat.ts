@@ -8,7 +8,7 @@ import {
   nativeToScVal,
   scValToNative
 } from '@stellar/stellar-sdk';
-import freighterApi from '@stellar/freighter-api';
+import { signTransaction } from "@stellar/freighter-api";
 
 // Contract adresi (deploy edildikten sonra güncellenecek)
 export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '';
@@ -57,10 +57,10 @@ export class NotesContractClient {
         .build();
 
       const preparedTransaction = await this.server.prepareTransaction(transaction);
-      const signedXDR = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
-        network: NETWORK_PASSPHRASE,
-        accountToSign: userAddress,
-      });
+      const signedXDR = await signTransaction(
+        preparedTransaction.toXDR(), 
+        { networkPassphrase: NETWORK_PASSPHRASE }
+      );
 
       const signedTx = TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE);
       const result = await this.server.sendTransaction(signedTx);
@@ -94,7 +94,7 @@ export class NotesContractClient {
         .build();
 
       const preparedTransaction = await this.server.prepareTransaction(transaction);
-      const signedXDR = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
+      const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
         network: NETWORK_PASSPHRASE,
         accountToSign: userAddress,
       });
@@ -209,7 +209,7 @@ export class NotesContractClient {
         .build();
 
       const preparedTransaction = await this.server.prepareTransaction(transaction);
-      const signedXDR = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
+      const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
         network: NETWORK_PASSPHRASE,
         accountToSign: userAddress,
       });
@@ -245,7 +245,7 @@ export class NotesContractClient {
         .build();
 
       const preparedTransaction = await this.server.prepareTransaction(transaction);
-      const signedXDR = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
+      const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
         network: NETWORK_PASSPHRASE,
         accountToSign: userAddress,
       });
