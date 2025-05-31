@@ -11,7 +11,8 @@ use soroban_sdk::{
     Address,
     log,
 };
-use soroban_sdk::token::{Client as TokenClient, StellarAssetClient};
+// ücret kesme özelliği devredışı olduğu için burası kapalı
+// use soroban_sdk::token::{StellarAssetClient, TokenClient};
 
 #[derive(Clone)]
 #[contracttype]
@@ -228,14 +229,19 @@ impl NotesContract {
     }
     
     /// Ücret tahsil et
-    fn charge_fee(env: &Env, user: &Address) {
-        let fee: i128 = env.storage().instance().get(&NOTE_FEE).unwrap_or(1000000);
-        let dev_wallet: Address = env.storage().instance().get(&DEV_WALLET).unwrap();
+    fn charge_fee(_env: &Env, _user: &Address) {
+        // ücret kesme özelliğini şimdilik devredışı bırakalım.
+        // parametrlerin önündeki "_" işaretleri, bu fonksiyonun şu anda kullanılmadığını gösterir.
+
         
-        // Native XLM transferi
-        let token_client = StellarAssetClient::new(env, &Address::from_contract_data(env));
-        token_client.transfer(user, &dev_wallet, &fee);
+        // let fee: i128 = env.storage().instance().get(&NOTE_FEE).unwrap_or(1000000);
+        // let dev_wallet: Address = env.storage().instance().get(&DEV_WALLET).unwrap();
+
+        // let token_address = Address::from_contract_id(&env, &[...]); // Token sözleşmesinin ID'si
+        // let token = TokenClient::new(env, &token_address);
+        // token.transfer(user, &dev_wallet, &fee);
         
-        log!(env, "Fee charged: {} from {} to {}", fee, user, dev_wallet);
+        // log!(env, "Fee charged: {} from {} to {}", fee, user, dev_wallet);
     }
+
 }

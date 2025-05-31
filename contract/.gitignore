@@ -1,1 +1,14 @@
-/target
+# Stellar Development
+.stellar/
+
+# Dependencies
+node_modules/
+target/
+
+# Environment
+.env
+.env.local
+
+# Build outputs
+dist/
+build/
