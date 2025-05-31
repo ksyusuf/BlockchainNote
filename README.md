@@ -1,35 +1,35 @@
-# 📝 Stellar-Soroban Not Uygulaması (BlockchainNote)
+# 📝 Stellar-Soroban Note Application (BlockchainNote)
 
-Bu proje, **Stellar ve Soroban** kullanarak oluşturulmuş, blockchain tabanlı güvenli bir not tutma uygulamasıdır. Notlarınızı güvenli bir şekilde kaydedin ve yönetin.
+This project is a secure note-taking application based on blockchain, created using **Stellar and Soroban**. Safely record and manage your notes.
 
-## 🚀 Özellikler
+## 🚀 Features
 
-- 🌐 **Next.js** tabanlı modern frontend
-- 📜 **Rust / Soroban** akıllı sözleşme entegrasyonu (Not kaydı için)
-- 🔑 **Freighter cüzdan** bağlantısı
-- 💾 Notları blockchain'e (Soroban) kaydetme (şu an mock)
-- 🎨 Şık ve sezgisel kullanıcı arayüzü (Tailwind CSS ile)
+- 🌐 Modern frontend based on **Next.js**
+- 📜 **Rust / Soroban** smart contract integration (for note recording)
+- 🔑 **Freighter wallet** connection
+- 💾 Recording notes to the blockchain (Soroban) (currently mock)
+- 🎨 Stylish and intuitive user interface (with Tailwind CSS)
 
-## 📂 Proje Yapısı
+## 📂 Project Structure
 
 ```bash
-/contract             # Rust/Soroban akıllı sözleşme kodları (varsa)
-/client               # Next.js uygulaması
-/client/app           # Uygulama sayfaları ve bileşenleri
-/client/app/globals.css # Global stiller
-/client/app/tailwind.config.js # Tailwind yapılandırması
-/README.md            # Bu döküman!
+/contract             # Rust/Soroban smart contract code (if any)
+/client               # Next.js application
+/client/app           # Application pages and components
+/client/app/globals.css # Global styles
+/client/app/tailwind.config.js # Tailwind configuration
+/README.md            # This document!
 ```
 
-## 🛠️ Kurulum
+## 🛠️ Setup
 
-1️⃣ **Repoyu klonlayın:**
+1️⃣ **Clone the repository:**
 ```bash
 git clone https://github.com/ksyusuf/BlockchainNote
 cd BlockchainNote
 ```
 
-2️⃣ **Bağımlılıkları yükleyin:**
+2️⃣ **Install dependencies:**
 ```bash
 npm install
 cd client
@@ -37,48 +37,50 @@ npm install
 cd ..
 ```
 
-3️⃣ **Geliştirme sunucusunu başlatın:**
+3️⃣ **Start the development server:**
 ```bash
 npm run dev
 ```
-Tarayıcıda `http://localhost:3000` adresini açın.
+Open `http://localhost:3000` in your browser.
 
-4️⃣ **Akıllı sözleşmeyi build etmek (eğer `contract` klasörü varsa):**
+4️⃣ **Build the smart contract (if there is a `contract` folder):**
 ```bash
 cd contract
 cargo build --target wasm32-unknown-unknown --release
 ```
 
-## ⚙️ Kullanım
+## ⚙️ Usage
 
-- Ana sayfada Freighter cüzdanınızı bağlayın.
-- Yeni not oluştur formunu kullanarak not başlığı ve içeriğini girin.
-- Notunuzu kaydettiğinizde (şu an mock işlem), blockchain'e kaydedilmiş gibi listeye eklenecektir.
+- Connect your Freighter wallet on the main page.
+- Enter the note title and content using the new note form.
+- When you save your note (currently a mock transaction), it will be added to the list as if it were recorded on the blockchain.
 
-## 📸 Ekran Görüntüleri
+## 📸 Screenshots
 
-(Buraya uygulamanızın ekran görüntüsünü ekleyebilirsiniz)
+(You can add your app's screenshot here)
 
-![Uygulama ekran görüntüsü](./screenshots/note-app.png)
-(Eğer `screenshots` klasörü ve içinde `note-app.png` varsa bu satırı bırakın, yoksa kaldırın veya güncelleyin)
+![App screenshot](./screenshots/note-app.png)
+(If the `screenshots` folder and `note-app.png` exist, leave this line; otherwise, remove or update it)
 
-## 📄 Lisans
+## 📄 License
 
-Bu proje [MIT Lisansı](LICENSE) ile lisanslanmıştır.
-
----
-
-✨ **Katkıda bulunmak isterseniz:**  
-- PR'larınızı bekliyoruz!  
-- Yeni özellik önerileri ve hata bildirimleri açabilirsiniz.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-🔗 **Bağlantılar:**
+✨ **If you want to contribute:**  
+- We are waiting for your PRs!  
+- You can open new feature suggestions and bug reports.
+
+---
+
+🔗 **Links:**
 - 🌐 [Stellar Developer Docs](https://developers.stellar.org/docs/)
-- 🔧 [Soroban Dökümantasyon](https://soroban.stellar.org/docs)
+- 🔧 [Soroban Documentation](https://soroban.stellar.org/docs)
 - 💼 [Freighter Wallet](https://freighter.app/)
 
 ---
 
-> **Not:** Projenizi tam olarak çalıştırmak ve notları gerçekten blockchain'e kaydetmek için Soroban smart contract'ı yazmanız, deploy etmeniz ve `client/app/page.tsx` dosyasındaki mock fonksiyonları gerçek contract çağrılarıyla değiştirmeniz gerekmektedir.
+> **Note:** To fully run your project and actually save the notes to the blockchain, you need to write and deploy the Soroban smart contract and replace the mock functions in the `client/app/page.tsx` file with real contract calls.
+
+Translated with DeepL.com (free version)
