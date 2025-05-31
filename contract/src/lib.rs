@@ -1,9 +1,17 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Env, Symbol, String, Vec, Address, 
-    token::{Client as TokenClient, StellarAssetClient},
+    contract, 
+    contractimpl,
+    contracttype,
+    symbol_short,
+    Env, 
+    Symbol,
+    String,
+    Vec,
+    Address,
     log,
 };
+use soroban_sdk::token::{Client as TokenClient, StellarAssetClient};
 
 #[derive(Clone)]
 #[contracttype]

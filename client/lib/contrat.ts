@@ -10,13 +10,13 @@ import {
 } from '@stellar/stellar-sdk';
 import { signTransaction } from "@stellar/freighter-api";
 
-// Contract adresi (deploy edildikten sonra güncellenecek)
+// Contract adresi ve network ayarları
 export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '';
+export const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || Networks.TESTNET;
+export const RPC_URL = process.env.NEXT_PUBLIC_HORIZON_RPC || 'https://soroban-testnet.stellar.org';
+export const DEV_WALLET = process.env.NEXT_PUBLIC_DEV_WALLET || '';
 
-// Network ayarları
-export const NETWORK_PASSPHRASE = Networks.TESTNET;
-export const RPC_URL = 'https://soroban-testnet.stellar.org';
-
+// Note interface'ini kontrat ile uyumlu hale getir
 export interface Note {
   id: number;
   owner: string;
@@ -32,16 +32,13 @@ export class NotesContractClient {
 
   constructor() {
     this.contract = new Contract(CONTRACT_ADDRESS);
-    this.server = new SorobanRpc.Server(RPC_URL);
+    this.server = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
   }
 
-  /**
-   * Contract'ı initialize et
-   */
-  async initialize(userAddress: string, devWallet: string, noteFee: number) {
+  // Kontrat başlatma
+  async initialize(userAddress: string, devWallet: string, noteFee: bigint) {
     try {
       const account = await this.server.getAccount(userAddress);
-
       const transaction = new TransactionBuilder(account, {
         fee: BASE_FEE,
         networkPassphrase: NETWORK_PASSPHRASE,
@@ -57,27 +54,22 @@ export class NotesContractClient {
         .build();
 
       const preparedTransaction = await this.server.prepareTransaction(transaction);
-      const signedXDR = await signTransaction(
-        preparedTransaction.toXDR(), 
-        { networkPassphrase: NETWORK_PASSPHRASE }
-      );
+      const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
+        networkPassphrase: NETWORK_PASSPHRASE
+      });
 
       const signedTx = TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE);
-      const result = await this.server.sendTransaction(signedTx);
-      return result;
+      return await this.server.sendTransaction(signedTx);
     } catch (error) {
       console.error('Initialize error:', error);
       throw error;
     }
   }
 
-  /**
-   * Yeni not oluştur
-   */
+  // Not oluştur
   async createNote(userAddress: string, title: string, ipfsHash: string): Promise<number> {
     try {
       const account = await this.server.getAccount(userAddress);
-
       const transaction = new TransactionBuilder(account, {
         fee: BASE_FEE,
         networkPassphrase: NETWORK_PASSPHRASE,
@@ -91,25 +83,17 @@ export class NotesContractClient {
           )
         )
         .setTimeout(30)
-        .build();
-
-      const preparedTransaction = await this.server.prepareTransaction(transaction);
+        .build();      const preparedTransaction = await this.server.prepareTransaction(transaction);
       const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
-        network: NETWORK_PASSPHRASE,
-        accountToSign: userAddress,
+        networkPassphrase: NETWORK_PASSPHRASE,
+        accountToSign: userAddress
       });
 
       const signedTx = TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE);
-      const result = await this.server.sendTransaction(signedTx);
-
-      if (result.status === 'SUCCESS') {
-        const resultXdr = result.resultXdr;
-        if (resultXdr) {
-          const transactionResult = xdr.TransactionResult.fromXDR(resultXdr, 'base64');
-          // Burada note ID'sini XDR'dan parse edebilirsin
-          // Şimdilik mock değer dönüyoruz
-          return 1;
-        }
+      const result = await this.server.sendTransaction(signedTx);      if (result.status === "PENDING" || result.status === "SUCCESS") {
+        // Note: In Soroban, transactions might be pending before success
+        // We'll return a mock value since the actual value would need to be retrieved separately
+        return 1;
       }
       throw new Error('Transaction failed');
     } catch (error) {
