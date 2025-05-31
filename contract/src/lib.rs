@@ -205,4 +205,29 @@ impl NotesContract {
             .unwrap_or(Vec::new(&env));
         
         let mut total_notes = 0u64;
-        let mut active_notes = 0u64
+        let mut active_notes = 0u64;
+        
+        for id in note_ids.iter() {
+            if let Some(note) = env.storage().persistent().get::<DataKey, Note>(&DataKey::Note(id)) {
+                total_notes += 1;
+                if note.is_active {
+                    active_notes += 1;
+                }
+            }
+        }
+        
+        (total_notes, active_notes)
+    }
+    
+    /// Ücret tahsil et
+    fn charge_fee(env: &Env, user: &Address) {
+        let fee: i128 = env.storage().instance().get(&NOTE_FEE).unwrap_or(1000000);
+        let dev_wallet: Address = env.storage().instance().get(&DEV_WALLET).unwrap();
+        
+        // Native XLM transferi
+        let token_client = StellarAssetClient::new(env, &Address::from_contract_data(env));
+        token_client.transfer(user, &dev_wallet, &fee);
+        
+        log!(env, "Fee charged: {} from {} to {}", fee, user, dev_wallet);
+    }
+}
