@@ -1,6 +1,8 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { isConnected, requestAccess, getPublicKey } from "@stellar/freighter-api";
+
+import { useState, useEffect } from 'react';
+import { isConnected, requestAccess, getPublicKey } from '@stellar/freighter-api';
+import { NotesContractClient } from '../lib/contrat';
 
 // Freighter window tipini tanımla
 declare global {
@@ -9,6 +11,17 @@ declare global {
   }
 }
 
+// Kontrat notunun tipi
+interface ContractNote {
+  id: number;
+  owner: string;
+  title: string;
+  ipfs_hash: string;
+  timestamp: number;
+  is_active: boolean;
+}
+
+// Client tarafındaki not tipi
 interface Note {
   id: string;
   title: string;
@@ -17,8 +30,11 @@ interface Note {
   timestamp: number;
 }
 
+// Yerel test ağı için sabit bir test hesabı kullanıyoruz
+const TEST_PUBLIC_KEY = null; // Bu değeri soroban CLI'dan alacağız
+
 export default function NotesApp() {
-  const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [publicKey, setPublicKey] = useState<string | null>(TEST_PUBLIC_KEY);
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState({ title: "", content: "" });
   const [isCreating, setIsCreating] = useState(false);
@@ -26,70 +42,72 @@ export default function NotesApp() {
 
   // Cüzdan bağlantısını kontrol et
   useEffect(() => {
+    let freighterChecked = false;
     const checkFreighter = async () => {
+      if (freighterChecked) return;
+      freighterChecked = true;
       try {
         if (typeof window === 'undefined') return;
-
         console.log("Freighter bağlantısı kontrol ediliyor...");
-        
-        // Önce bağlantıyı kontrol et
         const connected = await isConnected();
         console.log("Freighter bağlantı durumu:", connected);
-        
         if (connected) {
-          try {
-            // Erişim izni iste
-            const hasPermission = await requestAccess();
-            console.log("Freighter izin durumu:", hasPermission);
-            
-            if (hasPermission) {
-              // Public key'i al
-              const publicKey = await getPublicKey();
-              console.log("Freighter public key:", publicKey);
-              
-              if (publicKey) {
-                setPublicKey(publicKey);
-                await loadNotes(publicKey);
+          const hasPermission = await requestAccess();
+          if (hasPermission) {
+            const walletKey = await getPublicKey();
+            console.log("Freighter public key:", walletKey);
+            if (walletKey) {
+              setPublicKey(walletKey);
+              try {
+                const notesContract = new NotesContractClient();
+                const noteFeeBigInt = BigInt(process.env.NEXT_PUBLIC_MIN_BALANCE || "1000000");
+                await notesContract.initialize(
+                  walletKey,
+                  process.env.NEXT_PUBLIC_DEV_WALLET || "",
+                  noteFeeBigInt
+                );
+                console.log("Kontrat başarıyla başlatıldı");
+              } catch (error) {
+                console.log("Kontrat başlatma hatası (muhtemelen zaten başlatılmış):", error);
               }
             }
-          } catch (permError) {
-            console.error("Freighter izin hatası:", permError);
           }
         }
       } catch (error) {
-        console.error("Freighter bağlantı hatası:", error);
+        console.error("Cüzdan bağlantı hatası:", error);
+        alert("Cüzdan bağlantısı sırasında bir hata oluştu!");
       }
     };
-
-    // Sayfanın tamamen yüklenmesini bekle
     if (document.readyState === 'complete') {
       checkFreighter();
     } else {
-      window.addEventListener('load', checkFreighter);
-      return () => window.removeEventListener('load', checkFreighter);
+      const onLoad = () => checkFreighter();
+      window.addEventListener('load', onLoad);
+      return () => window.removeEventListener('load', onLoad);
     }
   }, []);
 
-  // Cüzdan bağla
+  // Test ağında otomatik olarak bağlanıyoruz
+  useEffect(() => {
+    if (publicKey) {
+      loadNotes(publicKey);
+    }
+  }, [publicKey]);
+
+  // Cüzdan bağlama butonu
   const handleConnectWallet = async () => {
     try {
-      if (typeof window === 'undefined') return;
+      const connected = await isConnected();
+      if (!connected) {
+        alert("Lütfen Freighter cüzdanını yükleyin!");
+        return;
+      }
 
-      console.log("Cüzdan bağlantısı başlatılıyor...");
-      
-      // Erişim izni iste
       const hasPermission = await requestAccess();
-      console.log("Freighter izin durumu:", hasPermission);
-      
       if (hasPermission) {
-        // Public key'i al
-        const publicKey = await getPublicKey();
-        console.log("Freighter public key:", publicKey);
-        
-        if (publicKey) {
-          setPublicKey(publicKey);
-          await loadNotes(publicKey);
-        }
+        const walletKey = await getPublicKey();
+        setPublicKey(walletKey);
+        await loadNotes(walletKey);
       }
     } catch (error) {
       console.error("Cüzdan bağlantı hatası:", error);
@@ -100,22 +118,26 @@ export default function NotesApp() {
   // Notları yükle (mock data - gerçek uygulamada blockchain'den gelecek)
   const loadNotes = async (address: string) => {
     try {
-      console.log("Notlar yükleniyor, adres:", address);
-      // Bu fonksiyon gerçek uygulamada blockchain'den notları çekecek
-      const mockNotes: Note[] = [
-        {
-          id: "1",
-          title: "İlk Notum",
-          content: "Bu benim blockchain üzerindeki ilk notum!",
-          ipfsHash: "QmXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-          timestamp: Date.now() - 86400000
-        }
-      ];
-      console.log("Notlar başarıyla yüklendi:", mockNotes);
-      setNotes(mockNotes);
+      console.log('loadNotes çağrısı, gelen adres:', address);
+      if (!address || typeof address !== 'string' || !address.startsWith('G')) {
+        console.error('loadNotes: HATALI ADRES! G... ile başlayan geçerli bir Stellar public key bekleniyor:', address);
+        alert('Cüzdan adresiniz geçersiz!');
+        return;
+      }
+      const notesContract = new NotesContractClient();
+      const notes = await notesContract.getUserNotes(address);
+      console.log('Notlar başarıyla yüklendi:', notes);
+      // API'den gelen Note[] tipini client'ın Note tipine dönüştür
+      const clientNotes = notes.map((note: ContractNote) => ({
+        id: note.id.toString(),
+        title: note.title,
+        content: "IPFS'ten içerik yüklenecek...", // IPFS entegrasyonu eklenecek
+        ipfsHash: note.ipfs_hash,
+        timestamp: note.timestamp
+      }));
+      setNotes(clientNotes);
     } catch (error) {
-      console.error("Notları yükleme hatası:", error);
-      alert("Notlar yüklenirken bir hata oluştu!");
+      console.error('Notları yükleme hatası:', error);
     }
   };
 
@@ -126,29 +148,29 @@ export default function NotesApp() {
       return;
     }
 
+    if (!publicKey) {
+      alert("Cüzdan bağlı değil!");
+      return;
+    }
+
     setIsCreating(true);
     try {
-      // 1. IPFS'e yükle (mock)
+      const notesContract = new NotesContractClient();
+
+      // 1. IPFS'e yükle (şimdilik mock)
       const ipfsHash = "Qm" + Math.random().toString(36).substring(2, 15);
       
-      // 2. Blockchain işlemi (mock)
-      // Gerçek uygulamada burada Soroban contract çağrılacak
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // 2. Blockchain'e kaydet
+      const noteId = await notesContract.createNote(publicKey, newNote.title, ipfsHash);
+      console.log("Not oluşturuldu, ID:", noteId);
 
-      // 3. Yeni notu listeye ekle
-      const note: Note = {
-        id: Date.now().toString(),
-        title: newNote.title,
-        content: newNote.content,
-        ipfsHash,
-        timestamp: Date.now()
-      };
+      // 3. Tüm notları yeniden yükle
+      await loadNotes(publicKey);
 
-      setNotes(prev => [note, ...prev]);
       setNewNote({ title: "", content: "" });
       setShowCreateForm(false);
       
-      alert("Not başarıyla kaydedildi!");
+      alert("Not başarıyla blockchain'e kaydedildi!");
     } catch (error) {
       console.error("Not oluşturma hatası:", error);
       alert("Not oluşturulurken hata oluştu!");

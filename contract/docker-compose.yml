@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  soroban:
+    image: stellar/quickstart:testing  # Soroban sandbox ortamı için resmi Docker imajı
+    container_name: soroban-sandbox  # Konteyner adı, sabit kalması için
+    ports:
+      - "8000:8000"  # RPC endpoint'ini host makineden erişilebilir yapar
+    restart: unless-stopped  # Sunucu yeniden başlarsa konteyner otomatik başlar; manuel durdurduğunda tekrar başlamaz
+    volumes:
+      - soroban-data:/root/.local/share/stellar  # Ledger verilerini saklamak için kalıcı volume
+
+volumes:
+  soroban-data:  # Yukarıdaki volume'un tanımı (kalıcı veri için)
+
+# ===========================================
+# 🐳 KULLANIM KOMUTLARI
+# ===========================================
+# Konteyner'ı başlat (arka planda):
+#   docker compose up -d
+#
+# Konteyner'ı durdur (silmeden):
+#   docker compose stop
+#
+# Durdurulmuş konteyner'ı yeniden başlat:
+#   docker compose start
+#
+# Konteyner'ı ve volume'u tamamen sil:
+#   docker compose down -v
+#
+# Tüm konteyner'ların durumunu kontrol et:
+#   docker ps -a
+# ===========================================
