@@ -15,6 +15,7 @@ import { signTransaction } from "@stellar/freighter-api";
 import { Address as StellarAddress } from '@stellar/stellar-sdk';
 
 
+
 // Contract adresi ve network ayarları
 export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ID || '';
 export const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || '';
@@ -101,7 +102,10 @@ export class NotesContractClient {
       const userAddressScVal = this.addressToScVal(userAddress);
       console.log('[initialize] UserAddressScVal:', userAddressScVal);
       
+      console.log('[initialize] UserAddressScVal:', userAddressScVal);
+      
       const devWalletScVal = this.addressToScVal(devWallet);
+      console.log('[initialize] DevWalletScVal:', devWalletScVal);
       console.log('[initialize] DevWalletScVal:', devWalletScVal);
       
       // Kontrat adresini ScVal'e dönüştür
@@ -325,6 +329,11 @@ export class NotesContractClient {
         console.error('Transaction sonuç işleme hatası:', error);
         return [];
       }
+        return notes;
+      } catch (error) {
+        console.error('Transaction sonuç işleme hatası:', error);
+        return [];
+      }
     } catch (error) {
       console.error('=== getUserNotes Genel Hata ===');
       console.error('Hata tipi:', error instanceof Error ? error.constructor.name : typeof error);
@@ -377,6 +386,7 @@ export class NotesContractClient {
         console.log('[getNote] Ham not objesi formatında, client formatına dönüştürülüyor...'); // Debug Log
         return {
           id: Number(note.id),
+          owner: userAddress,
           owner: userAddress,
           title: note.title,
           ipfs_hash: note.ipfs_hash,
@@ -579,6 +589,25 @@ export class NotesContractClient {
       return false;
     }
   }
+}
+
+function parseNote(scMap: any): any {
+  const note: any = {};
+  scMap._value.forEach((entry: any) => {
+    const key = Buffer.from(entry.key._value.data).toString();
+    const val = entry.val;
+
+    if (val._arm === "str") {
+      note[key] = Buffer.from(val._value.data).toString();
+    } else if (val._arm === "u64") {
+      note[key] = Number(val._value._value);
+    } else if (val._arm === "b") {
+      note[key] = val._value;
+    } else if (val._arm === "address") {
+      note[key] = Buffer.from(val._value._value._value.data).toString("hex");
+    }
+  });
+  return note;
 }
 
 function parseNote(scMap: any): any {
