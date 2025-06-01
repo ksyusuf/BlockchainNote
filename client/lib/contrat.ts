@@ -14,6 +14,7 @@ import {
 import { signTransaction } from "@stellar/freighter-api";
 import { Address as StellarAddress } from '@stellar/stellar-sdk';
 
+
 // Contract adresi ve network ayarları
 export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ID || '';
 export const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || '';
@@ -47,10 +48,6 @@ export class NotesContractClient {
   // Helper: Adresi ScVal'e dönüştür
   private addressToScVal(address: string): xdr.ScVal {
     try {
-      console.log('[addressToScVal] Başlangıç');
-      console.log('[addressToScVal] Gelen adres:', address);
-      console.log('[addressToScVal] Adres tipi:', typeof address);
-      console.log('[addressToScVal] Adres uzunluğu:', address.length);
 
       if (!StrKey.isValidEd25519PublicKey(address)) {
         console.error('[addressToScVal] Geçersiz Stellar public key');
@@ -59,8 +56,6 @@ export class NotesContractClient {
       
       // Adresi binary formata dönüştür
       const publicKey = StrKey.decodeEd25519PublicKey(address);
-      console.log('[addressToScVal] Binary dönüşüm sonucu:', publicKey);
-      console.log('[addressToScVal] Binary uzunluğu:', publicKey.length);
       
       // ScVal oluştur
       const scVal = xdr.ScVal.scvAddress(
@@ -68,8 +63,6 @@ export class NotesContractClient {
           xdr.PublicKey.publicKeyTypeEd25519(publicKey)
         )
       );
-      console.log('[addressToScVal] ScVal oluşturuldu:', scVal);
-      console.log('[addressToScVal] ScVal tipi:', scVal.switch().name);
       
       return scVal;
     } catch (error) {
@@ -81,18 +74,14 @@ export class NotesContractClient {
   // Helper: Kontrat adresini ScVal'e dönüştür
   private contractAddressToScVal(contractId: string): xdr.ScVal {
     try {
-      console.log('[contractAddressToScVal] Başlangıç');
-      console.log('[contractAddressToScVal] Gelen kontrat ID:', contractId);
       
       // Kontrat ID'sini hex'ten binary'ye dönüştür
       const contractBytes = Buffer.from(contractId, 'hex');
-      console.log('[contractAddressToScVal] Binary dönüşüm sonucu:', contractBytes);
       
       // ScVal oluştur
       const scVal = xdr.ScVal.scvAddress(
         xdr.ScAddress.scAddressTypeContract(contractBytes)
       );
-      console.log('[contractAddressToScVal] ScVal oluşturuldu:', scVal);
       
       return scVal;
     } catch (error) {
@@ -111,20 +100,33 @@ export class NotesContractClient {
       
       // Adresleri ScVal'e dönüştür
       const userAddressScVal = this.addressToScVal(userAddress);
+      console.log('[initialize] UserAddressScVal:', userAddressScVal);
+      
       const devWalletScVal = this.addressToScVal(devWallet);
+      console.log('[initialize] DevWalletScVal:', devWalletScVal);
       
       // Kontrat adresini ScVal'e dönüştür
-      const contractAddressScVal = this.contractAddressToScVal(CONTRACT_ADDRESS);
+      console.log('[initialize] Kontrat ID:', CONTRACT_ADDRESS);
       
-      // Simülasyon için dummy account kullan
-      const account = {
-        accountId: () => CONTRACT_ADDRESS,
-        sequenceNumber: () => "0",
-        sequence: () => "0",
-        incrementSequenceNumber: () => {},
-        getSequenceNumber: () => "0"
-      } as SorobanAccount;
+      // Kontrat ID'sini doğru formatta dönüştür
+      const contractId = StrKey.decodeContract(CONTRACT_ADDRESS);
+      console.log('[initialize] ContractId (buffer):', contractId);
+      console.log('[initialize] ContractId length:', contractId.length);
       
+      if (contractId.length !== 32) {
+        throw new Error(`Invalid contract ID length: ${contractId.length}, expected 32`);
+      }
+      
+      const contractAddressScVal = xdr.ScVal.scvAddress(
+        xdr.ScAddress.scAddressTypeContract(contractId)
+      );
+      console.log('[initialize] ContractAddressScVal:', contractAddressScVal);
+      
+      // Gerçek kullanıcı hesabını al
+      const account = await this.server.getAccount(userAddress);
+      console.log('[initialize] Kullanıcı hesabı alındı:', account.accountId());
+      
+      console.log('[initialize] Transaction oluşturuluyor...');
       const transaction = new TransactionBuilder(account, {
         fee: BASE_FEE,
         networkPassphrase: NETWORK_PASSPHRASE,
@@ -138,14 +140,23 @@ export class NotesContractClient {
         )
         .setTimeout(30)
         .build();
-
+      
+      console.log('[initialize] Transaction hazırlanıyor...');
       const preparedTransaction = await this.server.prepareTransaction(transaction);
+      console.log('[initialize] Transaction hazırlandı');
+      
+      console.log('[initialize] Transaction imzalanıyor...');
       const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
         networkPassphrase: NETWORK_PASSPHRASE,
         accountToSign: userAddress
       });
+      console.log('[initialize] Transaction imzalandı');
+      
+      console.log('[initialize] Transaction gönderiliyor...');
       const signedTx = TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE);
       const result = await this.server.sendTransaction(signedTx);
+      console.log('[initialize] Transaction gönderildi, sonuç:', result);
+      
       return result;
     } catch (error) {
       console.error('[initialize] Hata:', error);
@@ -216,25 +227,21 @@ export class NotesContractClient {
         throw new Error('Geçersiz Stellar adresi');
       }
 
-      // 2. Kullanıcı adresini ScVal'e dönüştür
-      const userAddressScVal = this.addressToScVal(userAddress);
+      // 2. Kullanıcı adresini Soroban formatına dönüştür
+      const stellarAddress = StellarAddress.fromString(userAddress);
+      const userAddressScVal = xdr.ScVal.scvAddress(
+        xdr.ScAddress.scAddressTypeAccount(
+          xdr.PublicKey.publicKeyTypeEd25519(
+            stellarAddress.toScAddress().accountId().ed25519()
+          )
+        )
+      );
       console.log('Kullanıcı adresi ScVal:', userAddressScVal);
 
-      // 3. Kontrat adresini ScVal'e dönüştür
-      const contractAddressScVal = this.contractAddressToScVal(CONTRACT_ADDRESS);
-      console.log('Kontrat adresi ScVal:', contractAddressScVal);
+      // 3. Transaction oluştur
+      const account = await this.server.getAccount(userAddress);
+      console.log('Kullanıcı hesabı alındı:', account.accountId());
 
-      // 4. Simülasyon için dummy account kullan
-      const account = {
-        accountId: () => CONTRACT_ADDRESS,
-        sequenceNumber: () => "0",
-        sequence: () => "0",
-        incrementSequenceNumber: () => {},
-        getSequenceNumber: () => "0"
-      } as SorobanAccount;
-
-      // 5. Transaction oluştur
-      console.log('Transaction oluşturuluyor...');
       const tx = new TransactionBuilder(account, {
         fee: BASE_FEE,
         networkPassphrase: NETWORK_PASSPHRASE,
@@ -247,43 +254,112 @@ export class NotesContractClient {
         )
         .setTimeout(30)
         .build();
-      console.log('Transaction oluşturuldu:', tx.toXDR());
+      console.log('Transaction oluşturuldu');
 
-      // 6. Simülasyon yap
-      console.log('Simülasyon başlatılıyor...');
-      const simulateResult = await this.server.simulateTransaction(tx);
-      console.log('Simülasyon sonucu:', simulateResult);
-      
-      const retval = (simulateResult as any).retval;
-      console.log('Retval:', retval);
+      // 4. Transaction'ı hazırla
+      console.log('Transaction hazırlanıyor...');
+      const preparedTransaction = await this.server.prepareTransaction(tx);
+      console.log('Transaction hazırlandı');
 
-      if (!retval) {
-        console.log('Retval boş, boş dizi dönülüyor');
+      // 5. Transaction'ı imzala
+      console.log('Transaction imzalanıyor...');
+      const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
+        networkPassphrase: NETWORK_PASSPHRASE,
+        accountToSign: userAddress
+      });
+      console.log('Transaction imzalandı');
+
+      // 6. Transaction'ı gönder
+      console.log('Transaction gönderiliyor...');
+      const signedTx = TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE);
+      const result = await this.server.sendTransaction(signedTx);
+      console.log('Transaction gönderildi, sonuç:', result);
+
+      // 7. Transaction'ın onaylanmasını bekle
+      console.log('Transaction onayı bekleniyor...');
+      let transactionResult;
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (attempts < maxAttempts) {
+        try {
+          transactionResult = await this.server.getTransaction(result.hash);
+          if (transactionResult.status === 'SUCCESS') {
+            console.log('Transaction onaylandı:', transactionResult);
+            break;
+          }
+        } catch (e) {
+          console.log(`Deneme ${attempts + 1}: Transaction henüz onaylanmadı...`);
+        }
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 saniye bekle
+      }
+
+      if (!transactionResult || transactionResult.status !== 'SUCCESS') {
+        console.log('Transaction onaylanmadı veya zaman aşımına uğradı');
         return [];
       }
 
-      // 7. Sonucu işle
-      console.log('Sonuç işleniyor...');
-      const rawNotes = scValToNative(retval);
-      console.log('Raw notes:', rawNotes);
-      
-      if (!Array.isArray(rawNotes)) {
-        console.log('Raw notes dizi değil, boş dizi dönülüyor');
+      if (!transactionResult.resultMetaXdr) {
+        console.log('Transaction sonucu boş');
         return [];
       }
 
-      const notes = rawNotes.map((n) => ({
-        id: Number(n.id),
-        owner: typeof n.owner === 'string' ? n.owner : JSON.stringify(n.owner),
-        title: n.title,
-        ipfs_hash: n.ipfs_hash,
-        timestamp: Number(n.timestamp),
-        is_active: Boolean(n.is_active),
-      }));
-      console.log('İşlenmiş notlar:', notes);
+      try {
+        // Transaction sonucunu doğrudan kullan
+        const metaJson = transactionResult.resultMetaXdr;
+        console.log('Meta JSON:', JSON.stringify(metaJson, null, 2));
 
-      return notes;
+        // Soroban meta verilerini kontrol et
+        const v3 = metaJson.v3();
+        if (!v3 || !v3.sorobanMeta) {
+          console.log('Soroban meta bulunamadı');
+          return [];
+        }
 
+        const sorobanMeta = v3.sorobanMeta();
+        if (!sorobanMeta || !sorobanMeta.returnValue) {
+          console.log('Return value bulunamadı');
+          return [];
+        }
+
+        const returnVal = sorobanMeta.returnValue();
+        console.log('ReturnValue:', JSON.stringify(returnVal, null, 2));
+
+        if (!returnVal.vec || !Array.isArray(returnVal.vec())) {
+          console.log('Return value boş ya da beklenen formatta değil');
+          return [];
+        }
+
+        let rawNotes;
+        try {
+          rawNotes = scValToNative(returnVal);
+          console.log('Raw notes:', rawNotes);
+        } catch (error) {
+          console.error('ScVal dönüşüm hatası:', error);
+          return [];
+        }
+
+        if (!Array.isArray(rawNotes)) {
+          console.log('Raw notes dizi değil, boş dizi dönülüyor');
+          return [];
+        }
+
+        const notes = rawNotes.map((n) => ({
+          id: Number(n.id),
+          owner: userAddress,
+          title: n.title,
+          ipfs_hash: n.ipfs_hash,
+          timestamp: Number(n.timestamp),
+          is_active: Boolean(n.is_active),
+        }));
+        console.log('İşlenmiş notlar:', notes);
+
+        return notes;
+      } catch (error) {
+        console.error('Transaction sonuç işleme hatası:', error);
+        return [];
+      }
     } catch (error) {
       console.error('=== getUserNotes Genel Hata ===');
       console.error('Hata tipi:', error instanceof Error ? error.constructor.name : typeof error);
@@ -338,7 +414,7 @@ export class NotesContractClient {
         console.log('[getNote] Ham not objesi formatında, client formatına dönüştürülüyor...'); // Debug Log
         return {
           id: Number(note.id),
-          owner: typeof note.owner === 'string' ? note.owner : JSON.stringify(note.owner), // Adresi string yap
+          owner: userAddress,
           title: note.title,
           ipfs_hash: note.ipfs_hash,
           timestamp: Number(note.timestamp), // Timestamp'i number yap
@@ -540,6 +616,25 @@ export class NotesContractClient {
       return false;
     }
   }
+}
+
+function parseNote(scMap: any): any {
+  const note: any = {};
+  scMap._value.forEach((entry: any) => {
+    const key = Buffer.from(entry.key._value.data).toString();
+    const val = entry.val;
+
+    if (val._arm === "str") {
+      note[key] = Buffer.from(val._value.data).toString();
+    } else if (val._arm === "u64") {
+      note[key] = Number(val._value._value);
+    } else if (val._arm === "b") {
+      note[key] = val._value;
+    } else if (val._arm === "address") {
+      note[key] = Buffer.from(val._value._value._value.data).toString("hex");
+    }
+  });
+  return note;
 }
 
 /**
