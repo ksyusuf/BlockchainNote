@@ -107,7 +107,6 @@ export default function NotesApp() {
       if (hasPermission) {
         const walletKey = await getPublicKey();
         setPublicKey(walletKey);
-        await loadNotes(walletKey);
       }
     } catch (error) {
       console.error("Cüzdan bağlantı hatası:", error);
@@ -120,7 +119,7 @@ export default function NotesApp() {
     try {
       console.log('loadNotes çağrısı, gelen adres:', address);
       if (!address || typeof address !== 'string' || !address.startsWith('G')) {
-        console.error('loadNotes: HATALI ADRES! G... ile başlayan geçerli bir Stellar public key bekleniyor:', address);
+        console.error('loadNotes: HATALI ADRES!');
         alert('Cüzdan adresiniz geçersiz!');
         return;
       }
@@ -131,10 +130,11 @@ export default function NotesApp() {
       const clientNotes = notes.map((note: ContractNote) => ({
         id: note.id.toString(),
         title: note.title,
-        content: "IPFS'ten içerik yüklenecek...", // IPFS entegrasyonu eklenecek
+        content: note.ipfs_hash,
         ipfsHash: note.ipfs_hash,
-        timestamp: note.timestamp
-      }));
+        timestamp: Number(note.timestamp) * 1000
+      }))
+      .sort((a, b) => b.timestamp - a.timestamp); // Yeniden eskiye sırala
       setNotes(clientNotes);
     } catch (error) {
       console.error('Notları yükleme hatası:', error);
@@ -156,16 +156,14 @@ export default function NotesApp() {
     setIsCreating(true);
     try {
       const notesContract = new NotesContractClient();
-
-      // 1. IPFS'e yükle (şimdilik mock)
-      const ipfsHash = "Qm" + Math.random().toString(36).substring(2, 15);
       
-      // 2. Blockchain'e kaydet
-      const noteId = await notesContract.createNote(publicKey, newNote.title, ipfsHash);
+      // İçeriği ipfs_hash olarak kaydet
+      const noteId = await notesContract.createNote(
+        publicKey, 
+        newNote.title, 
+        newNote.content  // content'i ipfs_hash olarak gönder
+      );
       console.log("Not oluşturuldu, ID:", noteId);
-
-      // 3. Tüm notları yeniden yükle
-      await loadNotes(publicKey);
 
       setNewNote({ title: "", content: "" });
       setShowCreateForm(false);
@@ -181,7 +179,9 @@ export default function NotesApp() {
 
   // Tarih formatla
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString("tr-TR", {
+    // Timestamp zaten milisaniye cinsinden
+    const date = new Date(timestamp);
+    return date.toLocaleDateString("tr-TR", {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -308,8 +308,7 @@ export default function NotesApp() {
                   </span>
                 </div>
                 <p className="text-gray-200 mb-4 leading-relaxed">{note.content}</p>
-                <div className="flex items-center justify-between text-xs text-gray-400">
-                  <span>IPFS: {note.ipfsHash.substring(0, 20)}...</span>
+                <div className="flex items-center justify-end text-xs text-gray-400">
                   <div className="flex items-center">
                     <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
                     Blockchain'de kaydedildi
