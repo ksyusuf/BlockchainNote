@@ -15,7 +15,6 @@ import { signTransaction } from "@stellar/freighter-api";
 import { Address as StellarAddress } from '@stellar/stellar-sdk';
 
 
-
 // Contract adresi ve network ayarları
 export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ID || '';
 export const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || '';
@@ -100,16 +99,10 @@ export class NotesContractClient {
       
       // Adresleri ScVal'e dönüştür
       const userAddressScVal = this.addressToScVal(userAddress);
-      console.log('[initialize] UserAddressScVal:', userAddressScVal);
-      
-      console.log('[initialize] UserAddressScVal:', userAddressScVal);
       
       const devWalletScVal = this.addressToScVal(devWallet);
-      console.log('[initialize] DevWalletScVal:', devWalletScVal);
-      console.log('[initialize] DevWalletScVal:', devWalletScVal);
       
       // Kontrat adresini ScVal'e dönüştür
-      console.log('[initialize] Kontrat ID:', CONTRACT_ADDRESS);
       
       // Kontrat ID'sini doğru formatta dönüştür
       const contractId = StrKey.decodeContract(CONTRACT_ADDRESS);
@@ -159,8 +152,12 @@ export class NotesContractClient {
   // Not oluştur
   async createNote(userAddress: string, title: string, ipfsHash: string): Promise<number> {
     try {
+      console.log('[createNote] Başlatılıyor...'); // Debug Log
+      console.log('[createNote] Kullanıcı Adresi:', userAddress); // Debug Log
       
+      // Adresi ScVal'e dönüştür
       const addressScVal = this.addressToScVal(userAddress);
+      
       const account = await this.server.getAccount(userAddress);
       
       const transaction = new TransactionBuilder(account, {
@@ -177,17 +174,13 @@ export class NotesContractClient {
         )
         .setTimeout(30)
         .build();
-      console.log('[createNote] Transaction Oluşturuldu');
       const preparedTransaction = await this.server.prepareTransaction(transaction);
-      console.log('[createNote] Transaction Hazırlandı');
       const signedXDR = await signTransaction(preparedTransaction.toXDR(), {
         networkPassphrase: NETWORK_PASSPHRASE,
         accountToSign: userAddress
       });
-      console.log('[createNote] Transaction İmzalandı');
       const signedTx = TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE);
       const result = await this.server.sendTransaction(signedTx);
-      console.log('[createNote] Transaction Gönderildi, Sonuç:', result);
 
       if ('error' in result) {
         console.error('[createNote] Transaction hatası detay:', result);
@@ -234,7 +227,6 @@ export class NotesContractClient {
         )
         .setTimeout(30)
         .build();
-      console.log('Transaction oluşturuldu');
 
       // 4. Transaction'ı hazırla
       const preparedTransaction = await this.server.prepareTransaction(tx);
@@ -320,15 +312,10 @@ export class NotesContractClient {
           owner: userAddress,
           title: n.title,
           ipfs_hash: n.ipfs_hash,
-          timestamp: typeof n.timestamp === 'bigint' ? Number(n.timestamp) : n.timestamp,
+          timestamp: Number(n.timestamp),
           is_active: Boolean(n.is_active),
         }));
 
-        return notes;
-      } catch (error) {
-        console.error('Transaction sonuç işleme hatası:', error);
-        return [];
-      }
         return notes;
       } catch (error) {
         console.error('Transaction sonuç işleme hatası:', error);
@@ -386,7 +373,6 @@ export class NotesContractClient {
         console.log('[getNote] Ham not objesi formatında, client formatına dönüştürülüyor...'); // Debug Log
         return {
           id: Number(note.id),
-          owner: userAddress,
           owner: userAddress,
           title: note.title,
           ipfs_hash: note.ipfs_hash,
@@ -589,25 +575,6 @@ export class NotesContractClient {
       return false;
     }
   }
-}
-
-function parseNote(scMap: any): any {
-  const note: any = {};
-  scMap._value.forEach((entry: any) => {
-    const key = Buffer.from(entry.key._value.data).toString();
-    const val = entry.val;
-
-    if (val._arm === "str") {
-      note[key] = Buffer.from(val._value.data).toString();
-    } else if (val._arm === "u64") {
-      note[key] = Number(val._value._value);
-    } else if (val._arm === "b") {
-      note[key] = val._value;
-    } else if (val._arm === "address") {
-      note[key] = Buffer.from(val._value._value._value.data).toString("hex");
-    }
-  });
-  return note;
 }
 
 function parseNote(scMap: any): any {

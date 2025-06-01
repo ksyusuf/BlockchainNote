@@ -157,11 +157,10 @@ export default function NotesApp() {
     try {
       const notesContract = new NotesContractClient();
       
-      // İçeriği ipfs_hash olarak kaydet
       const noteId = await notesContract.createNote(
         publicKey, 
         newNote.title, 
-        newNote.content  // content'i ipfs_hash olarak gönder
+        newNote.content
       );
       console.log("Not oluşturuldu, ID:", noteId);
 
