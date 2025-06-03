@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { setIsTxPending } from '../lib/uiSlice';
+import { setIsTxPending, setIsNotesLoading } from '../lib/uiSlice';
 import { NotesContractClient } from '../lib/contrat';
 
 interface NewNoteProps {
@@ -30,7 +30,7 @@ export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }:
     }
 
     setIsCreating(true);
-    dispatch(setIsTxPending(true));
+   
     try {
       const notesContract = new NotesContractClient();
       const noteId = await notesContract.createNote(
@@ -38,9 +38,12 @@ export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }:
         newNote.title, 
         newNote.content
       );
+      setNewNote({ title: "", content: "" });
       console.log("Not oluşturuldu, ID:", noteId);
 
-      setNewNote({ title: "", content: "" });
+      dispatch(setIsTxPending(true));
+      dispatch(setIsNotesLoading(false));
+
       onClose();
       onNoteCreated();
     } catch (error) {
@@ -48,7 +51,6 @@ export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }:
       alert("Not oluşturulurken hata oluştu!");
     } finally {
       setIsCreating(false);
-      dispatch(setIsTxPending(false));
     }
   };
 

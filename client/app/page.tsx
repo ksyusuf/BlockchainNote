@@ -7,6 +7,7 @@ import { setIsTxPending, setIsNotesLoading } from '../lib/uiSlice';
 import { connectWallet, checkWalletConnection } from '../lib/wallet';
 import { useRouter } from 'next/navigation';
 import NewNote from '../components/NewNote';
+import { store } from '../lib/store';
 
 // Freighter window tipini tanımla
 declare global {
@@ -37,12 +38,11 @@ interface Note {
 export default function Home() {
   const dispatch = useDispatch();
   const router = useRouter();
-  const { address } = useSelector((state: any) => state.ui);
+  const { address, isConnected, isConnecting, error: walletError } = useSelector((state: any) => state.wallet);
   const isTxPending = useSelector((state: any) => state.ui.isTxPending);
   const isNotesLoading = useSelector((state: any) => state.ui.isNotesLoading);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isCheckingWallet, setIsCheckingWallet] = useState(true);
   const [notesError, setNotesError] = useState<string | null>(null);
@@ -53,40 +53,42 @@ export default function Home() {
     const checkFreighterConnection = async () => {
       if (typeof window === 'undefined') return;
       try {
-        const walletKey = await checkWalletConnection();
-        if (walletKey) {
-          setPublicKey(walletKey);
+        const isConnected = await checkWalletConnection();
+        if (isConnected) {
+          const { address } = store.getState().wallet;
+          setPublicKey(address);
+        } else {
+          setPublicKey(null);
         }
       } catch (error) {
         console.error("Cüzdan bağlantı kontrol hatası:", error);
         setErrorMsg("Cüzdan bağlantı kontrolü sırasında bir hata oluştu!");
+        setPublicKey(null);
       } finally {
         setIsCheckingWallet(false);
       }
     };
     checkFreighterConnection();
-  }, []);
+  }, [dispatch]);
 
   const handleConnect = async () => {
     try {
-      setIsConnecting(true);
-      const { address, balance } = await connectWallet();
-      console.log('Bağlanan cüzdan:', address); // Debug için
+      const { address } = await connectWallet();
+      console.log('Bağlanan cüzdan:', address);
       setPublicKey(address);
     } catch (error) {
       console.error('Cüzdan bağlantı hatası:', error);
-    } finally {
-      setIsConnecting(false);
+      setPublicKey(null);
     }
   };
 
   // publicKey değiştiğinde notları yükle
   useEffect(() => {
-    if (publicKey && !isNotesLoading && !isTxPending && !isConnecting && !errorMsg) {
+    if (publicKey && isConnected) {
       dispatch(setIsNotesLoading(true));
       loadNotes(publicKey).then(() => dispatch(setIsNotesLoading(false)));
     }
-  }, [publicKey]);
+  }, [publicKey, isConnected, dispatch]);
 
   // Notları yükle
   const loadNotes = async (address: string) => {
@@ -108,11 +110,9 @@ export default function Home() {
       dispatch(setIsNotesLoading(true));
       let result;
       try {
-        console.log('[loadNotes] getUserNotes çağrılıyor...');
         result = await notesContract.getUserNotes(address);
         dispatch(setIsTxPending(false));
         dispatch(setIsNotesLoading(true));
-        console.log('[loadNotes] getUserNotes döndü:', result);
         didLoadNotes = true;
       } catch (err: any) {
         dispatch(setIsTxPending(false));
@@ -163,7 +163,6 @@ export default function Home() {
         setNotes([]);
         return;
       }
-      console.log('[loadNotes] Notlar başarıyla yüklendi:', result.notes);
       const clientNotes = result.notes.map((note: ContractNote) => ({
         id: note.id.toString(),
         title: note.title,
@@ -226,7 +225,7 @@ export default function Home() {
     );
   }
 
-  if (!publicKey) {
+  if (!isConnected || !publicKey) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <h1 className="text-4xl font-bold text-white mb-8">
@@ -236,6 +235,11 @@ export default function Home() {
           Stellar blockchain üzerinde notlarınızı güvenle saklayın. 
           Cüzdanınızı bağlayarak başlayın.
         </p>
+        {walletError && (
+          <div className="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl mb-4">
+            {walletError}
+          </div>
+        )}
         <button
           onClick={handleConnect}
           disabled={isConnecting}
