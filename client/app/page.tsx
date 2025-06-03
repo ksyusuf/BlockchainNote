@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { isConnected, requestAccess, getPublicKey } from '@stellar/freighter-api';
 import { NotesContractClient } from '../lib/contrat';
+import { useSelector, useDispatch, useStore } from 'react-redux';
+import { AppDispatch } from '../lib/store';
+import { setIsTxPending, setIsNotesLoading } from '../lib/uiSlice';
 
 // Freighter window tipini tanımla
 declare global {
@@ -34,110 +37,228 @@ interface Note {
 const TEST_PUBLIC_KEY = null; // Bu değeri soroban CLI'dan alacağız
 
 export default function NotesApp() {
+  const dispatch = useDispatch<AppDispatch>();
+  // Fix: useSelector typing issue workaround
+  // Instead of passing RootState, use the default selector and cast state
+  const isTxPending = useSelector((state: any) => state.ui.isTxPending);
+  const isNotesLoading = useSelector((state: any) => state.ui.isNotesLoading);
+
   const [publicKey, setPublicKey] = useState<string | null>(TEST_PUBLIC_KEY);
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState({ title: "", content: "" });
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false); // Bağlanırken buton disable ve spinner
+  const [errorMsg, setErrorMsg] = useState<string | null>(null); // Hata pop-up'ı için
+  const [isCheckingWallet, setIsCheckingWallet] = useState(true); // Cüzdan bağlantısı kontrol ediliyor state'i
+  const [notesError, setNotesError] = useState<string | null>(null); // Notlar yüklenirken hata
+  const [notesRejected, setNotesRejected] = useState(false); // Not getirme reddedildi mi?
 
-  // Cüzdan bağlantısını kontrol et
+  // Sadece bağlantı durumunu kontrol et, otomatik bağlantı/izin isteme
   useEffect(() => {
-    let freighterChecked = false;
-    const checkFreighter = async () => {
-      if (freighterChecked) return;
-      freighterChecked = true;
+    const checkFreighterConnection = async () => {
+      if (typeof window === 'undefined') return;
       try {
-        if (typeof window === 'undefined') return;
-        console.log("Freighter bağlantısı kontrol ediliyor...");
         const connected = await isConnected();
-        console.log("Freighter bağlantı durumu:", connected);
         if (connected) {
-          const hasPermission = await requestAccess();
-          if (hasPermission) {
-            const walletKey = await getPublicKey();
-            console.log("Freighter public key:", walletKey);
-            if (walletKey) {
-              setPublicKey(walletKey);
-              try {
-                const notesContract = new NotesContractClient();
-                const noteFeeBigInt = BigInt(process.env.NEXT_PUBLIC_MIN_BALANCE || "1000000");
-                await notesContract.initialize(
-                  walletKey,
-                  process.env.NEXT_PUBLIC_DEV_WALLET || "",
-                  noteFeeBigInt
-                );
-                console.log("Kontrat başarıyla başlatıldı");
-              } catch (error) {
-                console.log("Kontrat başlatma hatası (muhtemelen zaten başlatılmış):", error);
-              }
-            }
+          const walletKey = await getPublicKey();
+          if (walletKey) {
+            setPublicKey(walletKey);
           }
         }
       } catch (error) {
-        console.error("Cüzdan bağlantı hatası:", error);
-        alert("Cüzdan bağlantısı sırasında bir hata oluştu!");
+        console.error("Cüzdan bağlantı kontrol hatası:", error);
+        setErrorMsg("Cüzdan bağlantı kontrolü sırasında bir hata oluştu!");
+      } finally {
+        setIsCheckingWallet(false); // Kontrol tamamlandı
       }
     };
-    if (document.readyState === 'complete') {
-      checkFreighter();
-    } else {
-      const onLoad = () => checkFreighter();
-      window.addEventListener('load', onLoad);
-      return () => window.removeEventListener('load', onLoad);
-    }
+    checkFreighterConnection();
   }, []);
-
-  // Test ağında otomatik olarak bağlanıyoruz
-  useEffect(() => {
-    if (publicKey) {
-      loadNotes(publicKey);
-    }
-  }, [publicKey]);
 
   // Cüzdan bağlama butonu
   const handleConnectWallet = async () => {
+    setIsConnecting(true);
+    dispatch(setIsTxPending(true)); // İşlem onayı bekleniyor spinner'ı başlasın
     try {
       const connected = await isConnected();
       if (!connected) {
-        alert("Lütfen Freighter cüzdanını yükleyin!");
+        setErrorMsg("Lütfen Freighter cüzdanını yükleyin!");
+        setIsConnecting(false);
+        dispatch(setIsTxPending(false));
         return;
       }
-
-      const hasPermission = await requestAccess();
-      if (hasPermission) {
-        const walletKey = await getPublicKey();
+      let hasPermission = false;
+      let walletKey = null;
+      try {
+        const accessResult = await requestAccess();
+        hasPermission =
+          String(accessResult) === "true" ||
+          (typeof accessResult === "string" && /^G[A-Z2-7]{55}$/.test(accessResult));
+        if (hasPermission) {
+          walletKey = typeof accessResult === "string" && accessResult.startsWith("G") ? accessResult : await getPublicKey();
+        }
+      } catch (err: any) {
+        // Hata mesajını string olarak al
+        const msg = (typeof err === "string" ? err : err?.message || "").toLowerCase();
+        if (msg.includes("the user rejected this request")) {
+          setErrorMsg("Cüzdan bağlantısını iptal ettiniz.");
+        } else if (
+          msg.includes("user closed") ||
+          msg.includes("cancel") ||
+          msg.includes("denied") ||
+          msg.includes("rejected") ||
+          msg.includes("window closed")
+        ) {
+          setErrorMsg("Cüzdan bağlantısı iptal edildi.");
+        } else if (msg.includes("unable to send message to extension")) {
+          setErrorMsg("Freighter uzantısına erişilemiyor. Lütfen uzantının yüklü ve aktif olduğundan emin olun.");
+        } else {
+          setErrorMsg("Cüzdan bağlantısı sırasında bir hata oluştu!");
+        }
+        setIsConnecting(false);
+        dispatch(setIsTxPending(false));
+        return;
+      }
+      if (hasPermission && walletKey) {
         setPublicKey(walletKey);
+        dispatch(setIsTxPending(false)); // Onay bitti, spinner kapat
+        dispatch(setIsNotesLoading(true)); // Notlar yükleniyor spinner'ı başlat
+        await loadNotes(walletKey);
+        dispatch(setIsNotesLoading(false)); // Notlar yükleniyor spinner'ı kapat
+      } else {
+        setErrorMsg("Cüzdan bağlantısı iptal edildi veya onay verilmedi.");
+        dispatch(setIsTxPending(false));
       }
     } catch (error) {
-      console.error("Cüzdan bağlantı hatası:", error);
-      alert("Cüzdan bağlantısı sırasında bir hata oluştu!");
+      setErrorMsg("Cüzdan bağlantısı sırasında bir hata oluştu!");
+      dispatch(setIsTxPending(false));
+    } finally {
+      setIsConnecting(false);
     }
   };
 
+  // publicKey değiştiğinde notları yükle (ilk açılışta otomatik bağlantı için)
+  useEffect(() => {
+    // Sadece sayfa ilk açılışında, otomatik bağlı cüzdan varsa notları yükle
+    if (publicKey && !isNotesLoading && !isTxPending && !isConnecting && !errorMsg) {
+      dispatch(setIsNotesLoading(true));
+      loadNotes(publicKey).then(() => dispatch(setIsNotesLoading(false))); // Notlar yükleniyor spinner'ı kapat
+    }
+  }, [publicKey]);
+
   // Notları yükle (mock data - gerçek uygulamada blockchain'den gelecek)
   const loadNotes = async (address: string) => {
+    dispatch(setIsNotesLoading(false));
+    dispatch(setIsTxPending(true));
+    setNotesError(null);
+    setNotesRejected(false);
+    let didUserReject = false;
+    let didLoadNotes = false;
+    console.log('[loadNotes] ÇAĞRILDI, adres:', address);
     try {
-      console.log('loadNotes çağrısı, gelen adres:', address);
       if (!address || typeof address !== 'string' || !address.startsWith('G')) {
-        console.error('loadNotes: HATALI ADRES!');
+        console.error('[loadNotes] HATALI ADRES:', address);
         alert('Cüzdan adresiniz geçersiz!');
+        dispatch(setIsNotesLoading(false));
         return;
       }
       const notesContract = new NotesContractClient();
-      const notes = await notesContract.getUserNotes(address);
-      console.log('Notlar başarıyla yüklendi:', notes);
-      // API'den gelen Note[] tipini client'ın Note tipine dönüştür
-      const clientNotes = notes.map((note: ContractNote) => ({
+      // Transaction başlatıldı, kullanıcıya spinner göster
+      dispatch(setIsNotesLoading(true)); // Onay verildiğinde loading başlasın
+      let result;
+      try {
+        console.log('[loadNotes] getUserNotes çağrılıyor...');
+        result = await notesContract.getUserNotes(address);
+        // İşlem onayı spinner'ı kapat
+        dispatch(setIsTxPending(false));
+        // Notlar yükleniyor spinner'ı aç
+        dispatch(setIsNotesLoading(true));
+        console.log('[loadNotes] getUserNotes döndü:', result);
+        didLoadNotes = true;
+      } catch (err: any) {
+        dispatch(setIsTxPending(false));
+        dispatch(setIsNotesLoading(false));
+        let errMsg = '';
+        if (typeof err === 'string') {
+          errMsg = err;
+        } else if (err && typeof err.message === 'string') {
+          errMsg = err.message;
+        }
+        if (errMsg.toLowerCase().includes('the user rejected this request')) {
+          setNotesRejected(true);
+          setNotesError(null);
+          setNotes([]);
+          didUserReject = true;
+          console.warn('[loadNotes] Kullanıcı not getirme isteğini REDDETTİ.');
+          return;
+        } else {
+          setNotesError('Notlar yüklenirken bir hata oluştu.');
+          setNotes([]);
+          console.error('[loadNotes] getUserNotes bilinmeyen hata:', errMsg);
+        }
+        return;
+      }
+      if (didUserReject) {
+        return;
+      }
+      // Yeni sözlük yapısına göre kontrol
+      if (!result || typeof result !== 'object') {
+        setNotesError('Notlar yüklenirken bir hata oluştu.');
+        setNotes([]);
+        return;
+      }
+      if (result.error) {
+        const msg = (result.message || '').toLowerCase();
+        if (msg.includes('the user rejected this request')) {
+          setNotesRejected(true);
+          setNotesError(null);
+          setNotes([]);
+          console.warn('[loadNotes] Kullanıcı not getirme isteğini REDDETTİ. (error)');
+          return;
+        } else {
+          setNotesError(result.message || 'Notlar yüklenirken bir hata oluştu.');
+          setNotes([]);
+          return;
+        }
+      }
+      if (!didLoadNotes || !Array.isArray(result.notes)) {
+        setNotes([]);
+        return;
+      }
+      console.log('[loadNotes] Notlar başarıyla yüklendi:', result.notes);
+      const clientNotes = result.notes.map((note: ContractNote) => ({
         id: note.id.toString(),
         title: note.title,
         content: note.ipfs_hash,
         ipfsHash: note.ipfs_hash,
         timestamp: Number(note.timestamp) * 1000
-      }))
-      .sort((a, b) => b.timestamp - a.timestamp); // Yeniden eskiye sırala
+      })).sort((a, b) => b.timestamp - a.timestamp);
       setNotes(clientNotes);
-    } catch (error) {
-      console.error('Notları yükleme hatası:', error);
+    } catch (error: any) {
+      dispatch(setIsTxPending(false));
+      dispatch(setIsNotesLoading(false));
+      console.error('[loadNotes] CATCH BLOĞU HATA:', error);
+      let errMsg = '';
+      if (typeof error === 'string') {
+        errMsg = error;
+      } else if (error && typeof error.message === 'string') {
+        errMsg = error.message;
+      }
+      if (errMsg.toLowerCase().includes('the user rejected this request')) {
+        setNotesRejected(true);
+        setNotesError(null);
+        setNotes([]);
+        console.warn('[loadNotes] Kullanıcı not getirme isteğini REDDETTİ. (catch)');
+        return;
+      } else {
+        setNotesError('Notlar yüklenirken bir hata oluştu.');
+        setNotes([]);
+        console.error('[loadNotes] catch bilinmeyen hata:', errMsg);
+      }
+    } finally {
+      dispatch(setIsNotesLoading(false));
+      console.log('[loadNotes] BİTTİ, loading kapatıldı.');
     }
   };
 
@@ -154,9 +275,9 @@ export default function NotesApp() {
     }
 
     setIsCreating(true);
+    dispatch(setIsTxPending(true)); // İşlem başlarken spinner başlath
     try {
       const notesContract = new NotesContractClient();
-      
       const noteId = await notesContract.createNote(
         publicKey, 
         newNote.title, 
@@ -168,11 +289,14 @@ export default function NotesApp() {
       setShowCreateForm(false);
       
       alert("Not başarıyla blockchain'e kaydedildi!");
+      // Notlar yüklenirken loading spinner gösterilsin
+      await loadNotes(publicKey);
     } catch (error) {
       console.error("Not oluşturma hatası:", error);
       alert("Not oluşturulurken hata oluştu!");
     } finally {
       setIsCreating(false);
+      dispatch(setIsTxPending(false)); // İşlem bittiğinde spinner kapat
     }
   };
 
@@ -189,6 +313,21 @@ export default function NotesApp() {
     });
   };
 
+  if (isCheckingWallet) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-4">
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 shadow-2xl border border-white/20 max-w-md w-full text-center flex flex-col items-center justify-center">
+          <svg className="w-10 h-10 text-white animate-spin mb-4" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <h2 className="text-xl font-semibold text-white mb-2">Cüzdan bağlantısı kontrol ediliyor...</h2>
+          <p className="text-gray-300">Lütfen bekleyin.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!publicKey) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-4">
@@ -202,12 +341,32 @@ export default function NotesApp() {
             <h1 className="text-3xl font-bold text-white mb-4">Stellar Notes</h1>
             <p className="text-gray-300 mb-8">Blockchain tabanlı güvenli not tutma uygulaması</p>
             <button
-              onClick={handleConnectWallet}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg"
+              onClick = {handleConnectWallet}
+              disabled={isConnecting}
+              className={`w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg ${isConnecting ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
-              Freighter Cüzdanını Bağla
+              {isConnecting ? (
+                <>
+                  <svg className="w-5 h-5 inline mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Bağlanıyor...
+                </>
+              ) : (
+                "Freighter Cüzdanını Bağla"
+              )}
             </button>
           </div>
+          {/* Hata pop-up */}
+          {errorMsg && (
+            <div className="mt-6 bg-red-500/90 text-white rounded-xl px-4 py-3 shadow-lg animate-fade-in">
+              <div className="flex items-center justify-between">
+                <span>{errorMsg}</span>
+                <button onClick={() => setErrorMsg(null)} className="ml-4 text-white/80 hover:text-white font-bold">&times;</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -287,7 +446,52 @@ export default function NotesApp() {
 
         {/* Notlar Listesi */}
         <div className="space-y-4">
-          {notes.length === 0 ? (
+          {isTxPending ? (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-12 shadow-2xl border border-white/20 text-center flex flex-col items-center justify-center">
+              <svg className="w-10 h-10 text-white animate-spin mb-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <h3 className="text-xl font-semibold text-white mb-2">İşlem onayı bekleniyor...</h3>
+              <p className="text-gray-300">Lütfen cüzdanınızda işlemi onaylayın.</p>
+            </div>
+          ) : isNotesLoading ? (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-12 shadow-2xl border border-white/20 text-center flex flex-col items-center justify-center">
+              <svg className="w-10 h-10 text-white animate-spin mb-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <h3 className="text-xl font-semibold text-white mb-2">Notlar yükleniyor...</h3>
+              <p className="text-gray-300">Blockchain'den notlarınız getiriliyor.</p>
+            </div>
+          ) : notesRejected ? (
+            <div className="bg-yellow-500/80 text-white rounded-2xl p-8 shadow-2xl border border-white/20 text-center flex flex-col items-center justify-center">
+              <svg className="w-10 h-10 text-white mb-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <h3 className="text-xl font-semibold mb-2">Not getirme reddedildi</h3>
+              <p className="text-white/80 mb-4">Notlarınızı görüntülemek için cüzdanınızda onay vermelisiniz.</p>
+              <button
+                onClick={() => {
+                  setNotesRejected(false);
+                  dispatch(setIsNotesLoading(true));
+                  loadNotes(publicKey!).then(() => dispatch(setIsNotesLoading(false)));
+                }}
+                className="mt-2 bg-white/20 hover:bg-white/30 text-white font-semibold py-2 px-6 rounded-xl transition-all duration-300 shadow-lg"
+              >
+                Yenile
+              </button>
+            </div>
+          ) : notesError ? (
+            <div className="bg-red-500/80 text-white rounded-2xl p-8 shadow-2xl border border-white/20 text-center flex flex-col items-center justify-center">
+              <svg className="w-10 h-10 text-white mb-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <h3 className="text-xl font-semibold mb-2">{notesError}</h3>
+            </div>
+          ) : notes.length === 0 ? (
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-12 shadow-2xl border border-white/20 text-center">
               <div className="w-16 h-16 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full mx-auto mb-4 flex items-center justify-center">
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

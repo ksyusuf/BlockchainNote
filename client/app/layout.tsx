@@ -1,5 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
+import ReduxProvider from './Provider';
 
 export const metadata: Metadata = {
   title: 'BlockchainNote',
@@ -13,7 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr">
-      <body>{children}</body>
+      <body>
+        <ReduxProvider>
+          {children}
+        </ReduxProvider>
+      </body>
     </html>
   )
 }

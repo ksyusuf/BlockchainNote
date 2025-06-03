@@ -13,7 +13,8 @@ import {
 } from '@stellar/stellar-sdk';
 import { signTransaction } from "@stellar/freighter-api";
 import { Address as StellarAddress } from '@stellar/stellar-sdk';
-
+import { store } from '../lib/store';
+import { setIsTxPending, setIsNotesLoading } from '../lib/uiSlice';
 
 // Contract adresi ve network ayarları
 export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ID || '';
@@ -194,12 +195,16 @@ export class NotesContractClient {
   }
 
   // Kullanıcının notlarını getir
-  async getUserNotes(userAddress: string): Promise<Note[]> {
-
+  async getUserNotes(
+    userAddress: string,
+    setPendingCallback?: (pending: boolean) => void,
+    setLoadingCallback?: (loading: boolean) => void
+  ): Promise<{ error: boolean; message: string; notes: Note[] }> {
     try {
       // 1. Adres doğrulama
       if (!userAddress || typeof userAddress !== 'string' || !userAddress.startsWith('G')) {
-        throw new Error('Geçersiz Stellar adresi');
+        console.error('Geçersiz Stellar adresi');
+        return { error: true, message: 'Geçersiz Stellar adresi', notes: [] };
       }
 
       // 2. Kullanıcı adresini Soroban formatına dönüştür
@@ -247,6 +252,10 @@ export class NotesContractClient {
       let attempts = 0;
       const maxAttempts = 10;
 
+      // Transaction beklenirken: setIsTxPending(true), setIsNotesLoading(false)
+      store.dispatch(setIsTxPending(false));
+      store.dispatch(setIsNotesLoading(true));
+
       while (attempts < maxAttempts) {
         try {
           transactionResult = await this.server.getTransaction(result.hash);
@@ -260,14 +269,20 @@ export class NotesContractClient {
         await new Promise(resolve => setTimeout(resolve, 2000)); // 2 saniye bekle
       }
 
+      // Transaction onaylandığında: setIsTxPending(false), setIsNotesLoading(true)
+      store.dispatch(setIsTxPending(true));
+      store.dispatch(setIsNotesLoading(false));
+
       if (!transactionResult || transactionResult.status !== 'SUCCESS') {
         console.log('Transaction onaylanmadı veya zaman aşımına uğradı');
-        return [];
+        store.dispatch(setIsNotesLoading(false));
+        return { error: true, message: 'Transaction onaylanmadı veya zaman aşımına uğradı', notes: [] };
       }
 
       if (!transactionResult.resultMetaXdr) {
         console.log('Transaction sonucu boş');
-        return [];
+        store.dispatch(setIsNotesLoading(false));
+        return { error: true, message: 'Transaction sonucu boş', notes: [] };
       }
 
       try {
@@ -278,33 +293,38 @@ export class NotesContractClient {
         const v3 = metaJson.v3();
         if (!v3 || !v3.sorobanMeta) {
           console.log('Soroban meta bulunamadı');
-          return [];
+          store.dispatch(setIsNotesLoading(false));
+          return { error: true, message: 'Soroban meta bulunamadı', notes: [] };
         }
 
         const sorobanMeta = v3.sorobanMeta();
         if (!sorobanMeta || !sorobanMeta.returnValue) {
           console.log('Return value bulunamadı');
-          return [];
+          store.dispatch(setIsNotesLoading(false));
+          return { error: true, message: 'Return value bulunamadı', notes: [] };
         }
 
         const returnVal = sorobanMeta.returnValue();
 
         if (!returnVal.vec || !Array.isArray(returnVal.vec())) {
           console.log('Return value boş ya da beklenen formatta değil');
-          return [];
+          store.dispatch(setIsNotesLoading(false));
+          return { error: true, message: 'Return value boş ya da beklenen formatta değil', notes: [] };
         }
 
         let rawNotes;
         try {
           rawNotes = scValToNative(returnVal);
         } catch (error) {
+          store.dispatch(setIsNotesLoading(false));
           console.error('ScVal dönüşüm hatası:', error);
-          return [];
+          return { error: true, message: 'ScVal dönüşüm hatası', notes: [] };
         }
 
         if (!Array.isArray(rawNotes)) {
+          store.dispatch(setIsNotesLoading(false));
           console.log('Raw notes dizi değil, boş dizi dönülüyor');
-          return [];
+          return { error: true, message: 'Raw notes dizi değil', notes: [] };
         }
 
         const notes = rawNotes.map((n) => ({
@@ -315,18 +335,16 @@ export class NotesContractClient {
           timestamp: Number(n.timestamp),
           is_active: Boolean(n.is_active),
         }));
-
-        return notes;
+        store.dispatch(setIsNotesLoading(false));
+        return { error: false, message: 'Başarılı', notes };
       } catch (error) {
+        store.dispatch(setIsNotesLoading(false));
         console.error('Transaction sonuç işleme hatası:', error);
-        return [];
+        return { error: true, message: 'Transaction sonuç işleme hatası', notes: [] };
       }
     } catch (error) {
-      console.error('=== getUserNotes Genel Hata ===');
-      console.error('Hata tipi:', error instanceof Error ? error.constructor.name : typeof error);
-      console.error('Hata mesajı:', error instanceof Error ? error.message : String(error));
-      console.error('Hata stack:', error instanceof Error ? error.stack : '');
-      return [];
+      store.dispatch(setIsNotesLoading(false));
+      return { error: true, message: error instanceof Error ? error.message : String(error), notes: [] };
     }
   }
 
