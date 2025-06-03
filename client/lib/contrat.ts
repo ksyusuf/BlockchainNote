@@ -195,11 +195,7 @@ export class NotesContractClient {
   }
 
   // Kullanıcının notlarını getir
-  async getUserNotes(
-    userAddress: string,
-    setPendingCallback?: (pending: boolean) => void,
-    setLoadingCallback?: (loading: boolean) => void
-  ): Promise<{ error: boolean; message: string; notes: Note[] }> {
+  async getUserNotes(userAddress: string): Promise<{ error: boolean; message: string; notes: Note[] }> {
     try {
       // 1. Adres doğrulama
       if (!userAddress || typeof userAddress !== 'string' || !userAddress.startsWith('G')) {
