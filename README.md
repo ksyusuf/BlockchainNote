@@ -89,26 +89,9 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## 🔒 Smart Contract
 
-The project includes a token contract deployed on Stellar testnet with the following address:
+The project includes a contract deployed on Stellar Test Net with the following address:
 ```
 CC3WXG57TMKW6BLXWYXJVNLNR7VZNC37H7YT2OMVL2E2GAAVVST45PZM
 ```
-
-### Token Contract Features
-
-1. **Freeze Account Function**
-   - Allows freezing tokens for a specific account
-   - Prevents token transfers from frozen accounts
-   - Only authorized accounts can freeze tokens
-
-2. **Unfreeze Account Function**
-   - Enables unfreezing tokens for a specific account
-   - Restores normal token transfer functionality
-   - Only authorized accounts can unfreeze tokens
-
-3. **Transfer Function**
-   - Includes checks for frozen accounts
-   - Rejects transfers from frozen accounts
-   - Maintains normal transfer functionality for unfrozen accounts
 
 Translated with DeepL.com (free version)
