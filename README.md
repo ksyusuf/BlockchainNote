@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="https://github.com/ksyusuf/BlockchainNote/blob/master/BloackchainHeisenberg.png" alt="BlockchainHeisenberg" width="400"/>
+</div>
+
 # 📝 Stellar-Soroban Note Application (BlockchainNote)
 
 This project is a secure note-taking application based on blockchain, created using **Stellar and Soroban**. Safely record and manage your notes.
