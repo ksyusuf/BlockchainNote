@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { useDispatch } from 'react-redux';
-import { setIsTxPending, setIsNotesLoading } from '../lib/uiSlice';
+import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { setIsTxPending, setIsNotesLoading, setCreateNoteTransactionId } from '../lib/uiSlice';
 import { NotesContractClient } from '../lib/contrat';
 
 interface NewNoteProps {
@@ -14,6 +14,7 @@ interface NewNoteProps {
 
 export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }: NewNoteProps) {
   const dispatch = useDispatch();
+  const createNoteTransactionId = useSelector((state: any) => state.ui.createNoteTransactionId);
   const [newNote, setNewNote] = useState({ title: "", content: "" });
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }:
     }
 
     setIsCreating(true);
+    setError(null);
    
     try {
       const notesContract = new NotesContractClient();
@@ -38,6 +40,7 @@ export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }:
         newNote.title, 
         newNote.content
       );
+      // not oluşturma transactionu tamamlanana kadar buradan çıkamıyoruz zaten
       setNewNote({ title: "", content: "" });
       console.log("Not oluşturuldu, ID:", noteId);
 
@@ -48,7 +51,8 @@ export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }:
       onNoteCreated();
     } catch (error) {
       console.error("Not oluşturma hatası:", error);
-      alert("Not oluşturulurken hata oluştu!");
+      setError("Not oluşturulurken hata oluştu!");
+      dispatch(setIsTxPending(false));
     } finally {
       setIsCreating(false);
     }
@@ -86,7 +90,7 @@ export default function NewNote({ publicKey, onNoteCreated, showForm, onClose }:
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Kaydediliyor...
+                {createNoteTransactionId ? "Bekleyin..." : "İşlemi Onayı..."}
               </>
             ) : (
               "Kaydet"

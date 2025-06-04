@@ -258,9 +258,9 @@ export default function Home() {
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 shadow-2xl border border-white/20 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white mb-2">Stellar Notes</h1>
+              <h1 className="text-2xl font-bold text-white mb-2">Stellar Test Net</h1>
               <p className="text-gray-300 text-sm">
-                Bağlı: {publicKey.substring(0, 8)}...{publicKey.substring(publicKey.length - 8)}
+                Stellar Test Net üzerinde güvenli ve merkeziyetsiz not tutma uygulaması.
               </p>
             </div>
             <button

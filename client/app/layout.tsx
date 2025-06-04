@@ -7,7 +7,7 @@ import Header from '../components/Header';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Blockchain Notes',
+  title: 'Blockchain Note',
   description: 'Stellar blockchain üzerinde notlarınızı güvenle saklayın',
 };
 

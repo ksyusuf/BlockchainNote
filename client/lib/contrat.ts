@@ -14,7 +14,7 @@ import {
 import { signTransaction } from "@stellar/freighter-api";
 import { Address as StellarAddress } from '@stellar/stellar-sdk';
 import { store } from '../lib/store';
-import { setIsTxPending, setIsNotesLoading } from '../lib/uiSlice';
+import { setIsTxPending, setIsNotesLoading, setCreateNoteTransactionId } from '../lib/uiSlice';
 
 // Contract adresi ve network ayarları
 export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ID || '';
@@ -187,7 +187,28 @@ export class NotesContractClient {
         console.error('[createNote] Transaction hatası detay:', result);
         throw new Error(`Transaction failed: ${JSON.stringify(result)}`);
       }
-      return 1; // Şimdilik sabit bir değer dönüyoruz
+      store.dispatch(setCreateNoteTransactionId(result.hash));
+      // Transaction'ın onaylanmasını bekle
+      console.log('[createNote] Transaction onayı bekleniyor...');
+      let transactionResult;
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (attempts < maxAttempts) {
+        try {
+          transactionResult = await this.server.getTransaction(result.hash);
+          if (transactionResult.status === 'SUCCESS') {
+            console.log('[createNote] Transaction başarıyla onaylandı');
+            return 1; // Başarılı
+          }
+        } catch (e) {
+          console.log(`[createNote] Deneme ${attempts + 1}: Transaction henüz onaylanmadı...`);
+        }
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 saniye bekle
+      }
+
+      throw new Error('Transaction zaman aşımına uğradı');
     } catch (error) {
       console.error('[createNote] Hata:', error);
       throw error;
@@ -243,7 +264,7 @@ export class NotesContractClient {
       const result = await this.server.sendTransaction(signedTx);
 
       // 7. Transaction'ın onaylanmasını bekle
-      console.log('Transaction onayı bekleniyor...');
+      console.log('[getUserNotes] Transaction onayı bekleniyor...');
       let transactionResult;
       let attempts = 0;
       const maxAttempts = 10;

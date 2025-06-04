@@ -36,7 +36,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <h1 className="text-xl font-bold text-white">BlockchainNote</h1>
+            <h1 className="text-2xl font-bold text-white">BlockchainNote</h1>
           </div>
           {isConnected && address && (
             <div className="flex items-center gap-4">
@@ -46,9 +46,10 @@ export default function Header() {
                   <span 
                     className="text-white font-medium text-sm cursor-pointer hover:text-gray-300 transition-colors"
                     onClick={handleCopyAddress}
+                    title="Cüzdan Bağlantısını Kopyala"
                   >
                     <div className="flex items-center gap-1">
-                      {address ? `${address.substring(0, 4)}...${address.substring(address.length - 4)}` : 'Bağlan'}
+                      {address ? `${address.substring(0, 8)}...` : 'Bağlan'}
                       <svg className="w-4 h-4 text-gray-400 hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m-4 0h-4" />
                       </svg>
