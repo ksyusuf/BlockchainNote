@@ -9,9 +9,9 @@ This project is a secure note-taking application based on blockchain, created us
 ## 🚀 Features
 
 - 🌐 Modern frontend based on **Next.js**
-- 📜 **Rust / Soroban** smart contract integration (for note recording)
+- 📜 **Rust / Soroban** smart contract integration
 - 🔑 **Freighter wallet** connection
-- 💾 Recording notes to the blockchain (Soroban) (currently mock)
+- 💾 Recording notes to the blockchain
 - 🎨 Stylish and intuitive user interface (with Tailwind CSS)
 
 ## 📂 Project Structure
@@ -86,5 +86,29 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 > **Note:** To fully run your project and actually save the notes to the blockchain, you need to write and deploy the Soroban smart contract and replace the mock functions in the `client/app/page.tsx` file with real contract calls.
+
+## 🔒 Smart Contract
+
+The project includes a token contract deployed on Stellar testnet with the following address:
+```
+CC3WXG57TMKW6BLXWYXJVNLNR7VZNC37H7YT2OMVL2E2GAAVVST45PZM
+```
+
+### Token Contract Features
+
+1. **Freeze Account Function**
+   - Allows freezing tokens for a specific account
+   - Prevents token transfers from frozen accounts
+   - Only authorized accounts can freeze tokens
+
+2. **Unfreeze Account Function**
+   - Enables unfreezing tokens for a specific account
+   - Restores normal token transfer functionality
+   - Only authorized accounts can unfreeze tokens
+
+3. **Transfer Function**
+   - Includes checks for frozen accounts
+   - Rejects transfers from frozen accounts
+   - Maintains normal transfer functionality for unfrozen accounts
 
 Translated with DeepL.com (free version)
